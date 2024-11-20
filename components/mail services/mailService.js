@@ -1,13 +1,14 @@
 // mailService.js
 
 import nodemailer from "nodemailer";
-
+sendEmail = "gokulgokul10203@gmail.com";
+sender_password = "ymza fxgz pgmn edki";
 // Create a transporter using SMTP or your preferred email service
 const transporter = nodemailer.createTransport({
   service: "gmail", // or use other email services like SendGrid, SES, etc.
   auth: {
-    user: process.env.EMAIL_USER, // Your email (from your .env file)
-    pass: process.env.EMAIL_PASS, // Your email password or app-specific password
+    user: sendEmail, // Your email (from your .env file)
+    pass: sender_password, // Your email password or app-specific password
   },
 });
 
