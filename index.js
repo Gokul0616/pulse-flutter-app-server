@@ -8,9 +8,15 @@ import path from "path";
 import { Sequelize, DataTypes } from "sequelize";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import { sendEmail } from "./components/mail services/mailService.js";
+
+// Resolve the current directory for ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import fs from "fs";
 import { User } from "./components/models/userModel.js";
-import { sendEmail } from "./components/mail services/mailService.js";
 
 dotenv.config();
 
@@ -57,26 +63,32 @@ app.post("/api/PhoneOrEmailValidate", async (req, res) => {
 
   // Store OTP in-memory (Optional, based on your logic)
   const recipient = email || phone;
-
-  // Send OTP via email (if email is provided)
-  if (email) {
+  const existingUser = await User.findOne({
+    where: {
+      email: email, // Filter by email only
+    },
+  });
+  if (existingUser) {
+    return res
+      .status(422)
+      .json({ message: "Email already exists.", code: 422 });
+  } else if (email) {
     const subject = "Verify OTP for signup process";
     const body = `Your OTP is: ${otp}. Please use this to complete your signup process and enjoy your online presence.`;
     try {
       await sendEmail(email, subject, body); // Trigger the Python email service
       console.log(`OTP email sent to ${email}`);
+      // Respond with success and OTP (for development/testing purposes only)
+      res.status(201).json({
+        message: "OTP sent successfully. Please verify to complete signup.",
+        recipient,
+        otp, // Include the OTP in the response for frontend verification
+        code: 201,
+      });
     } catch (error) {
       return res.status(500).json({ error: "Error sending OTP email." });
     }
   }
-
-  // Respond with success and OTP (for development/testing purposes only)
-  res.status(201).json({
-    message: "OTP sent successfully. Please verify to complete signup.",
-    recipient,
-    otp, // Include the OTP in the response for frontend verification
-    code: 201,
-  });
 });
 // Create a storage engine to handle file uploads
 const storage = multer.diskStorage({
@@ -107,9 +119,12 @@ const upload = multer({
 if (!fs.existsSync("user_images")) {
   fs.mkdirSync("user_images");
 }
-
+app.use(
+  "/api/user_images",
+  express.static(path.join(__dirname, "user_images"))
+);
 // Route to handle image upload
-app.post("/api/upload", upload.single("image"), (req, res) => {
+app.post("/api/upload/userprofile", upload.single("image"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
@@ -200,9 +215,17 @@ app.post("/api/check-username", async (req, res) => {
 
 // API for user signup
 app.post("/api/signup", async (req, res) => {
-  const { username, email, password, full_name, dob, country, timezone } =
-    req.body;
-
+  const {
+    username,
+    email,
+    password,
+    full_name,
+    dob,
+    country,
+    timezone,
+    profilepath,
+  } = req.body;
+  console.log(req.body);
   try {
     // Validate required fields
     if (!username || !email || !password || !dob) {
@@ -234,6 +257,7 @@ app.post("/api/signup", async (req, res) => {
     const newUser = await User.create({
       unique_user_key: uniqueUserKey,
       username: lowerUser,
+      profile_picture: profilepath,
       email,
       password_hash: passwordHash,
       full_name,
@@ -265,7 +289,6 @@ app.get("/api/user-details", async (req, res) => {
     }
 
     // Fetch user details from the database using Sequelize
-    console.log(unique_user_id);
     const user = await User.findOne({
       where: { unique_user_key: unique_user_id },
 
@@ -291,7 +314,6 @@ app.get("/api/user-details", async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
-    console.log(user);
 
     // Respond with user details
     res.status(200).json({
