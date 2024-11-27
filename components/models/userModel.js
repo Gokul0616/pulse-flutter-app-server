@@ -2,43 +2,43 @@ import { Sequelize, DataTypes } from "sequelize";
 
 
 // Initialize Sequelize for remote server
-// const sequelize = new Sequelize(
-//   "postgres://pulsedb_rciu_user:x0xznPP3PinIztSHOudk8UibIIClhzAc@dpg-csusm79u0jms73au5pm0-a.oregon-postgres.render.com:5432/pulsedb_rciu",
-//   {
-//     dialect: "postgres",
-//     logging: false,
-//     dialectOptions: {
-//       ssl: {
-//         require: true,  // ensures SSL is used
-//         rejectUnauthorized: false  // set to true if the server has a valid SSL cert
-//       }
-//     }
-//   }
-// );
-// sequelize
-//   .sync({ force: false }) // Set force: true only if you want to recreate tables
-//   .then(() => {
-//     console.log("Database synced!");
-//   })
-//   .catch((error) => {
-//     console.error("Error syncing the database:", error);
-//   });
+const sequelize = new Sequelize(
+  "postgres://pulsedb_rciu_user:x0xznPP3PinIztSHOudk8UibIIClhzAc@dpg-csusm79u0jms73au5pm0-a.oregon-postgres.render.com:5432/pulsedb_rciu",
+  {
+    dialect: "postgres",
+    logging: false,
+    dialectOptions: {
+      ssl: {
+        require: true,  // ensures SSL is used
+        rejectUnauthorized: false  // set to true if the server has a valid SSL cert
+      }
+    }
+  }
+);
+sequelize
+  .sync({ force: false }) // Set force: true only if you want to recreate tables
+  .then(() => {
+    console.log("Database synced!");
+  })
+  .catch((error) => {
+    console.error("Error syncing the database:", error);
+  });
 
 
 
 // Initialize database for local database
   
-const sequelize = new Sequelize(
-  "postgres://postgres:Gokul001@@localhost:5432/pulseDb",
-  {
-    dialect: "postgres",
-  }
-);
-// Test the database connection
-postgresql: sequelize
-  .authenticate()
-  .then(() => console.log("Database connected successfully!"))
-  .catch((err) => console.error("Unable to connect to the database:", err));
+// const sequelize = new Sequelize(
+//   "postgres://postgres:Gokul001@@localhost:5432/pulseDb",
+//   {
+//     dialect: "postgres",
+//   }
+// );
+// // Test the database connection
+// postgresql: sequelize
+//   .authenticate()
+//   .then(() => console.log("Database connected successfully!"))
+//   .catch((err) => console.error("Unable to connect to the database:", err));
 
 
 export const User = sequelize.define( "User", {
