@@ -3,11 +3,14 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import { exec } from "child_process"; // Import exec from child_process to run Python script
-import multer from 'multer';
-import path from 'path';import { Sequelize, DataTypes } from "sequelize";
-import bcrypt from "bcrypt"; import jwt from "jsonwebtoken";
-import fs from 'fs'; import { User } from './components/models/userModel.js';
-import { sendEmail } from "./components/mail services/mailService.js";
+import multer from "multer";
+import path from "path";
+import { Sequelize, DataTypes } from "sequelize";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import fs from "fs";
+import { User } from "./components/models/userModel.js";
+// import { sendEmail } from "./components/mail services/mailService.js";
 
 dotenv.config();
 
@@ -18,26 +21,26 @@ app.use(cors());
 app.use(bodyParser.json());
 const SALT_ROUNDS = 10;
 // Utility function to send email by triggering the Python script
-// const sendEmail = (recipient, subject, body) => {
-//   return new Promise((resolve, reject) => {
-//     // Construct the command to run the Python script
-//     const command = `cd components/mail services && python3 send_email.py ${recipient} "${subject}" "${body}"`;
+const sendEmail = (recipient, subject, body) => {
+  return new Promise((resolve, reject) => {
+    // Construct the command to run the Python script
+    const command = `cd components/mail services && python3 send_email.py ${recipient} "${subject}" "${body}"`;
 
-//     // Execute the Python script
-//     exec(command, (error, stdout, stderr) => {
-//       if (error) {
-//         console.error(`exec error: ${error}`);
-//         return reject(error);
-//       }
-//       if (stderr) {
-//         console.error(`stderr: ${stderr}`);
-//         return reject(stderr);
-//       }
-//       console.log(`stdout: ${stdout}`);
-//       resolve(stdout);
-//     });
-//   });
-// };
+    // Execute the Python script
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`exec error: ${error}`);
+        return reject(error);
+      }
+      if (stderr) {
+        console.error(`stderr: ${stderr}`);
+        return reject(stderr);
+      }
+      console.log(`stdout: ${stdout}`);
+      resolve(stdout);
+    });
+  });
+};
 
 // Example route to send OTP via email
 app.post("/api/PhoneOrEmailValidate", async (req, res) => {
@@ -78,35 +81,35 @@ app.post("/api/PhoneOrEmailValidate", async (req, res) => {
 // Create a storage engine to handle file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'user_images'); // Folder to save images
+    cb(null, "user_images"); // Folder to save images
   },
   filename: (req, file, cb) => {
-    const userId = req.body.user_id || 'default_user'; // Use the user_id provided in the request body
+    const userId = req.body.user_id || "default_user"; // Use the user_id provided in the request body
     const ext = path.extname(file.originalname); // Get file extension
     cb(null, `${userId}_profile_image${ext}`); // Save file with userId_profile_image.extension
-  }
+  },
 });
 
 const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
-    const mimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const mimeTypes = ["image/jpeg", "image/png", "image/jpg"];
     if (mimeTypes.includes(file.mimetype)) {
       cb(null, true); // Accept the file
     } else {
-      cb(new Error('Invalid file type, only JPEG and PNG are allowed'), false); // Reject file
+      cb(new Error("Invalid file type, only JPEG and PNG are allowed"), false); // Reject file
     }
   },
-  limits: { fileSize: 5 * 1024 * 1024 } // Limit file size to 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5MB
 });
 
 // Make sure 'user_images' directory exists
-if (!fs.existsSync('user_images')) {
-  fs.mkdirSync('user_images');
+if (!fs.existsSync("user_images")) {
+  fs.mkdirSync("user_images");
 }
 
 // Route to handle image upload
-app.post('/api/upload', upload.single('image'), (req, res) => {
+app.post("/api/upload", upload.single("image"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
@@ -116,11 +119,10 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   // Optionally save the file path in the database
 
   res.status(200).json({
-    message: 'Profile image uploaded successfully!',
+    message: "Profile image uploaded successfully!",
     imagePath: imagePath, // Send the image path to the client
   });
 });
-
 
 // Auto-login API
 app.post("/api/auto-login", async (req, res) => {
@@ -158,13 +160,11 @@ app.post("/api/auto-login", async (req, res) => {
 // Mock Database or Data Source (replace with your actual database logic)
 
 //  Route to check username availability
-app.post('/api/check-username', async (req, res) => {
+app.post("/api/check-username", async (req, res) => {
   const { username } = req.body;
 
-  console.log("Checking username availability...");
-
   // Validate the username input
-  if (!username || typeof username !== 'string' || username.trim() === '') {
+  if (!username || typeof username !== "string" || username.trim() === "") {
     return res.status(400).json({
       error: "Username must be a non-empty string.",
     });
@@ -172,18 +172,20 @@ app.post('/api/check-username', async (req, res) => {
 
   try {
     // Check if the username exists in the database (using Sequelize ORM)
-    const user = await User.findOne({ where: { username: username } });
+    const user = await User.findOne({
+      where: { username: username.toLowerCase() },
+    });
 
     // If user is found, the username is taken
     if (user) {
       return res.status(200).json({
         available: false,
-        message: "Username is already taken."
+        message: "Username is already taken.",
       });
     } else {
       return res.status(200).json({
         available: true,
-        message: "Username is available."
+        message: "Username is available.",
       });
     }
   } catch (error) {
@@ -191,24 +193,16 @@ app.post('/api/check-username', async (req, res) => {
     console.error(error);
     return res.status(500).json({
       error: "An error occurred while checking username availability.",
-      details: error.message
+      details: error.message,
     });
   }
 });
 
-
 // API for user signup
 app.post("/api/signup", async (req, res) => {
-  const {
-    username,
-    email,
-    password,
-    full_name,
-    dob,
-    country,
-    timezone,
-  } = req.body;
-  
+  const { username, email, password, full_name, dob, country, timezone } =
+    req.body;
+
   try {
     // Validate required fields
     if (!username || !email || !password || !dob) {
@@ -235,11 +229,11 @@ app.post("/api/signup", async (req, res) => {
 
     // Hash the password
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
+    const lowerUser = username.toLowerCase();
     // Create a new user
     const newUser = await User.create({
       unique_user_key: uniqueUserKey,
-      username,
+      username: lowerUser,
       email,
       password_hash: passwordHash,
       full_name,
@@ -251,7 +245,7 @@ app.post("/api/signup", async (req, res) => {
     res.status(201).json({
       message: "User registered successfully!",
       user: {
-       uuid:newUser.unique_user_key 
+        uuid: newUser.unique_user_key,
       },
     });
   } catch (error) {
@@ -259,6 +253,162 @@ app.post("/api/signup", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
+// Route to get user details by unique user ID (via POST request)
+app.get("/api/user-details", async (req, res) => {
+  const unique_user_id = req.headers.authorization;
+
+  try {
+    // Validate the unique user ID
+    if (!unique_user_id) {
+      return res.status(400).json({ error: "Unique user ID is required." });
+    }
+
+    // Fetch user details from the database using Sequelize
+    console.log(unique_user_id);
+    const user = await User.findOne({
+      where: { unique_user_key: unique_user_id },
+
+      attributes: [
+        "unique_user_key",
+        "username",
+        "email",
+        "full_name",
+        "bio",
+        "followers_count",
+        "following_count",
+        "post_count",
+        "likes_count",
+        "visibility",
+        "streaks_percent",
+        "profile_picture",
+        "country",
+        "timezone",
+        "createdAt", // Include additional attributes if needed
+      ],
+    });
+    // If user is not found
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    console.log(user);
+
+    // Respond with user details
+    res.status(200).json({
+      message: "User details retrieved successfully.",
+      user,
+    });
+  } catch (error) {
+    console.error("Error retrieving user details:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+// Route to update user profile information
+app.put("/api/user-updateprofile", async (req, res) => {
+  const { full_name, username, bio } = req.body;
+  const userId = req.headers.authorization; // Get userId from Authorization header
+
+  try {
+    // Validate inputs
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required." });
+    }
+    if (!full_name && !username && !bio) {
+      return res.status(400).json({ error: "No data to update." });
+    }
+
+    // Fetch user from the database
+    const user = await User.findOne({
+      where: { unique_user_key: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    // Update the user's profile
+    await user.update({
+      full_name: full_name || user.full_name,
+      username: username || user.username,
+      bio: bio || user.bio,
+    });
+
+    // Respond with success message
+    res.status(200).json({
+      message: "User profile updated successfully.",
+      user: {
+        full_name: user.full_name,
+        username: user.username,
+        bio: user.bio,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.post("/api/auth/signin", async (req, res) => {
+  const { emailOrPhone, password } = req.body;
+
+  try {
+    // Validate input
+    if (!emailOrPhone || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email/Phone and password are required." });
+    }
+
+    // Find user by email or phone
+    // const user = await User.findOne({
+    //   where: {
+    //     [Sequelize.Op.or]: [{ email: emailOrPhone }, { phone: emailOrPhone }],
+    //   },
+    // });
+    const user = await User.findOne({
+      where: {
+        email: emailOrPhone, // Filter by email only
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid credentials." });
+    }
+
+    // Generate JWT token
+    // const token = jwt.sign(
+    //   { userId: user.unique_user_key },
+    //   process.env.JWT_SECRET, // Use a strong secret from your .env file
+    //   { expiresIn: "1d" } // Token expiration time
+    // );
+    const token = jwt.sign(
+      { userId: user.unique_user_key },
+      "your_hardcoded_secret_key",
+      { expiresIn: "1d" }
+    );
+
+    // Respond with user data and token
+    res.status(200).json({
+      message: "Sign-in successful.",
+      token,
+      user: {
+        id: user.unique_user_key,
+        username: user.username,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error("Error during sign-in:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
