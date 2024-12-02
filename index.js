@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import { User } from "./components/models/userModel.js";
 import { dirname } from "path";
-// import { sendEmail } from "./components/mail services/mailService.js";
+import { sendEmail } from "./components/mail services/mailService.js";
 
 // Resolve the current directory for ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -29,26 +29,26 @@ app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 const SALT_ROUNDS = 10;
 // Utility function to send email by triggering the Python script
-const sendEmail = (recipient, subject, body) => {
-  return new Promise((resolve, reject) => {
-    // Construct the command to run the Python script
-    const command = `cd components/mail services && python3 send_email.py ${recipient} "${subject}" "${body}"`;
+// const sendEmail = (recipient, subject, body) => {
+//   return new Promise((resolve, reject) => {
+//     // Construct the command to run the Python script
+//     const command = `cd components/mail services && python3 send_email.py ${recipient} "${subject}" "${body}"`;
 
-    // Execute the Python script
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`exec error: ${error}`);
-        return reject(error);
-      }
-      if (stderr) {
-        console.error(`stderr: ${stderr}`);
-        return reject(stderr);
-      }
-      console.log(`stdout: ${stdout}`);
-      resolve(stdout);
-    });
-  });
-};
+//     // Execute the Python script
+//     exec(command, (error, stdout, stderr) => {
+//       if (error) {
+//         console.error(`exec error: ${error}`);
+//         return reject(error);
+//       }
+//       if (stderr) {
+//         console.error(`stderr: ${stderr}`);
+//         return reject(stderr);
+//       }
+//       console.log(`stdout: ${stdout}`);
+//       resolve(stdout);
+//     });
+//   });
+// };
 
 // Example route to send OTP via email
 app.post("/api/PhoneOrEmailValidate", async (req, res) => {
