@@ -9,14 +9,15 @@ import { Sequelize, DataTypes } from "sequelize";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { fileURLToPath } from "url";
+import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
+import { User } from "./components/models/userModel.js";
 import { dirname } from "path";
 import { sendEmail } from "./components/mail services/mailService.js";
 
 // Resolve the current directory for ES module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-import fs from "fs";
-import { User } from "./components/models/userModel.js";
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: true }));
 const SALT_ROUNDS = 10;
 // Utility function to send email by triggering the Python script
 // const sendEmail = (recipient, subject, body) => {
@@ -75,6 +77,7 @@ app.post("/api/PhoneOrEmailValidate", async (req, res) => {
   } else if (email) {
     const subject = "Verify OTP for signup process";
     const body = `Your OTP is: ${otp}. Please use this to complete your signup process and enjoy your online presence.`;
+
     try {
       await sendEmail(email, subject, body); // Trigger the Python email service
       console.log(`OTP email sent to ${email}`);
@@ -96,9 +99,13 @@ const storage = multer.diskStorage({
     cb(null, "user_images"); // Folder to save images
   },
   filename: (req, file, cb) => {
-    const userId = req.body.user_id || "default_user"; // Use the user_id provided in the request body
-    const ext = path.extname(file.originalname); // Get file extension
-    cb(null, `${userId}_profile_image${ext}`); // Save file with userId_profile_image.extension
+    const ext = path.extname(file.originalname); // Get the original file extension
+    const profileKey = req.body.profile_key || req.headers.authorization; // Extract profile unique key from request
+    if (!profileKey) {
+      cb(new Error("Profile unique key is missing."), null); // Handle missing key
+    } else {
+      cb(null, `${profileKey}${ext}`); // Save file with profile unique key as name
+    }
   },
 });
 
@@ -120,6 +127,7 @@ if (!fs.existsSync("user_images")) {
   fs.mkdirSync("user_images");
 }
 
+// Serve static files from the 'user_images' directory
 app.use(
   "/api/user_images",
   express.static(path.join(__dirname, "user_images"))
@@ -131,18 +139,21 @@ app.post("/api/upload/userprofile", upload.single("image"), (req, res) => {
     return res.status(400).json({ message: "No file uploaded." });
   }
 
-  const imagePath = `user_images/${req.file.filename}`; // Path to the saved file
+  // Get the filename (UUID + extension)
+  const imageFilename = req.file.filename;
 
   // Construct the full URL for the uploaded image
-  const imageUrl = `${req.protocol}://${req.get("host")}/api/${imagePath}`;
-  // Alternatively, use a pre-defined `commonUrl` if you want a specific base URL
-  // const imageUrl = `${commonUrl}/api/${imagePath}`;
+  const imageUrl = `${req.protocol}://${req.get(
+    "host"
+  )}/api/user_images/${imageFilename}`;
 
-  // Optionally save the file path in the database
+  // Optionally save the file path (or UUID) in the database
+  // Example: save 'imageFilename' (UUID.ext) to the user's profile
 
   res.status(200).json({
     message: "Profile image uploaded successfully!",
-    imageUrl: imageUrl, // Send the full image URL to the client
+    imageUuid: path.parse(imageFilename).name, // Send back the UUID (without extension)
+    imageUrl: imageUrl, // Full URL to access the image
   });
 });
 
@@ -230,9 +241,9 @@ app.post("/api/signup", async (req, res) => {
     dob,
     country,
     timezone,
+    profileimagekey,
     profilepath,
   } = req.body;
-  console.log(req.body);
   try {
     // Validate required fields
     if (!username || !email || !password || !dob) {
@@ -256,7 +267,6 @@ app.post("/api/signup", async (req, res) => {
     const uniqueUserKey = `USER_${Date.now()}_${Math.random()
       .toString(36)
       .substring(2, 15)}`;
-
     // Hash the password
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const lowerUser = username.toLowerCase();
@@ -265,6 +275,7 @@ app.post("/api/signup", async (req, res) => {
       unique_user_key: uniqueUserKey,
       username: lowerUser,
       profile_picture: profilepath,
+      profile_picture_key: profileimagekey,
       email,
       password_hash: passwordHash,
       full_name,
@@ -312,6 +323,7 @@ app.get("/api/user-details", async (req, res) => {
         "visibility",
         "streaks_percent",
         "profile_picture",
+        "profile_picture_key",
         "country",
         "timezone",
         "createdAt", // Include additional attributes if needed
@@ -321,7 +333,6 @@ app.get("/api/user-details", async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
-
     // Respond with user details
     res.status(200).json({
       message: "User details retrieved successfully.",
@@ -332,50 +343,115 @@ app.get("/api/user-details", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-// Route to update user profile information
-app.put("/api/user-updateprofile", async (req, res) => {
-  const { full_name, username, bio } = req.body;
-  const userId = req.headers.authorization; // Get userId from Authorization header
+// Route to update user profile information// Route to update user profile information
+app.put(
+  "/api/user-updateprofile",
+  upload.single("profile_picture"),
+  async (req, res) => {
+    const { full_name, username, bio } = req.body;
+    const userId = req.headers.authorization; // Get userId from Authorization header
+    try {
+      // Validate inputs
+      if (!userId) {
+        return res.status(400).json({ error: "User ID is required." });
+      }
+      if (
+        !full_name &&
+        !username &&
+        !bio &&
+        !req.file &&
+        !req.body.profile_picture
+      ) {
+        return res.status(400).json({ error: "No data to update." });
+      }
+
+      // Fetch user from the database
+      const user = await User.findOne({
+        where: { unique_user_key: userId },
+      });
+      if (!user) {
+        return res.status(404).json({ error: "User not found." });
+      }
+
+      // If the profile picture is being updated and the user already has a profile picture
+      if (req.body.profile_picture && user.profile_picture) {
+        // Delete the old profile picture if it exists
+        const oldImagePath = path.join(
+          __dirname,
+          user.profile_picture.replace(
+            `${req.protocol}://${req.get("host")}/api/`,
+            ""
+          )
+        );
+        console.log(oldImagePath);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath); // Delete the old image
+        }
+        console.log(req.body.profile_picture + " pforliewl");
+
+        // Update the profile picture URL
+        // user.profile_picture = `${req.protocol}://${req.get(
+        //   "host"
+        // )}/api/user_images/${req.file.filename}`;
+      }
+
+      // Update the user's profile details
+      await user.update({
+        full_name: full_name || user.full_name,
+        username: username || user.username,
+        bio: bio || user.bio,
+        profile_picture: req.body.profile_picture, // Update profile picture if new one uploaded
+      });
+
+      // Respond with success message
+      res.status(200).json({
+        message: "User profile updated successfully.",
+        user: {
+          full_name: user.full_name,
+          username: user.username,
+          bio: user.bio,
+          profile_picture: user.profile_picture, // Send the updated profile picture URL
+        },
+      });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+app.post("/api/user/profile-key", async (req, res) => {
+  const { user_id } = req.body;
 
   try {
-    // Validate inputs
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required." });
+    if (user_id) {
+      // If user_id is provided, check for existing profile key
+      const user = await User.findOne({ where: { unique_user_key: user_id } });
+
+      if (user && user.dataValues.profile_picture_key) {
+        return res
+          .status(200)
+          .json({ profile_key: user.dataValues.profile_picture_key });
+      }
+
+      // Generate and save a new profile key for the user
+      const uuidKey = `UUID_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+      await User.update({ profileKey: uuidKey }, { where: { id: user_id } });
+      return res.status(200).json({ profile_key: uuidKey });
+    } else {
+      // If no user_id is provided, generate a standalone UUID
+      const uuidKey = `UUID_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+      return res.status(200).json({ uuid: uuidKey });
     }
-    if (!full_name && !username && !bio) {
-      return res.status(400).json({ error: "No data to update." });
-    }
-
-    // Fetch user from the database
-    const user = await User.findOne({
-      where: { unique_user_key: userId },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found." });
-    }
-
-    // Update the user's profile
-    await user.update({
-      full_name: full_name || user.full_name,
-      username: username || user.username,
-      bio: bio || user.bio,
-    });
-
-    // Respond with success message
-    res.status(200).json({
-      message: "User profile updated successfully.",
-      user: {
-        full_name: user.full_name,
-        username: user.username,
-        bio: user.bio,
-      },
-    });
   } catch (error) {
-    console.error("Error updating profile:", error);
+    console.error("Error fetching or generating profile key:", error);
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
 
 app.post("/api/auth/signin", async (req, res) => {
   const { emailOrPhone, password } = req.body;

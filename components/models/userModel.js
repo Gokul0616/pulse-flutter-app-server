@@ -34,14 +34,27 @@ sequelize
 //     dialect: "postgres",
 //   }
 // );
-// // Test the database connection
-// postgresql: sequelize
+// sequelize
+//   .sync({ force: false })
+//   .then(() => {
+//     console.log("Models synchronized.");
+//   })
+//   .catch((err) => {
+//     console.error("Error syncing models:", err);
+//   });
+
+// // Authenticate the connection to the database
+// sequelize
 //   .authenticate()
-//   .then(() => console.log("Database connected successfully!"))
-//   .catch((err) => console.error("Unable to connect to the database:", err));
-
-
-export const User = sequelize.define( "User", {
+//   .then(() => {
+//     console.log("Connection to the database established successfully.");
+//   })
+//   .catch((err) => {
+//     console.error("Unable to connect to the database:", err);
+//   } );
+  
+  
+export const User = sequelize.define("User", {
   user_id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -68,6 +81,7 @@ export const User = sequelize.define( "User", {
   },
   full_name: DataTypes.STRING,
   profile_picture: DataTypes.STRING,
+  profile_picture_key: DataTypes.STRING,
   dob: {
     type: DataTypes.DATEONLY,
     allowNull: false,
