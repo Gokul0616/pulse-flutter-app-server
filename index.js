@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import { User } from "./components/models/userModel.js";
 import { dirname } from "path";
-import { sendEmail } from "./components/mail services/mailService.js";
+// import { sendEmail } from "./components/mail services/mailService.js";
 
 // Resolve the current directory for ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -29,26 +29,26 @@ app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 const SALT_ROUNDS = 10;
 // Utility function to send email by triggering the Python script
-// const sendEmail = (recipient, subject, body) => {
-//   return new Promise((resolve, reject) => {
-//     // Construct the command to run the Python script
-//     const command = `cd components/mail services && python3 send_email.py ${recipient} "${subject}" "${body}"`;
+const sendEmail = (recipient, subject, body) => {
+  return new Promise((resolve, reject) => {
+    // Construct the command to run the Python script
+    const command = `cd components/mail services && python3 send_email.py ${recipient} "${subject}" "${body}"`;
 
-//     // Execute the Python script
-//     exec(command, (error, stdout, stderr) => {
-//       if (error) {
-//         console.error(`exec error: ${error}`);
-//         return reject(error);
-//       }
-//       if (stderr) {
-//         console.error(`stderr: ${stderr}`);
-//         return reject(stderr);
-//       }
-//       console.log(`stdout: ${stdout}`);
-//       resolve(stdout);
-//     });
-//   });
-// };
+    // Execute the Python script
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`exec error: ${error}`);
+        return reject(error);
+      }
+      if (stderr) {
+        console.error(`stderr: ${stderr}`);
+        return reject(stderr);
+      }
+      console.log(`stdout: ${stdout}`);
+      resolve(stdout);
+    });
+  });
+};
 
 // Example route to send OTP via email
 app.post("/api/PhoneOrEmailValidate", async (req, res) => {
@@ -359,7 +359,6 @@ app.put(
         !full_name &&
         !username &&
         !bio &&
-        !req.file &&
         !req.body.profile_picture
       ) {
         return res.status(400).json({ error: "No data to update." });
@@ -372,7 +371,6 @@ app.put(
       if (!user) {
         return res.status(404).json({ error: "User not found." });
       }
-
       // If the profile picture is being updated and the user already has a profile picture
       if (req.body.profile_picture && user.profile_picture) {
         // Delete the old profile picture if it exists
@@ -383,11 +381,9 @@ app.put(
             ""
           )
         );
-        console.log(oldImagePath);
         if (fs.existsSync(oldImagePath)) {
           fs.unlinkSync(oldImagePath); // Delete the old image
         }
-        console.log(req.body.profile_picture + " pforliewl");
 
         // Update the profile picture URL
         // user.profile_picture = `${req.protocol}://${req.get(
@@ -400,7 +396,7 @@ app.put(
         full_name: full_name || user.full_name,
         username: username || user.username,
         bio: bio || user.bio,
-        profile_picture: req.body.profile_picture, // Update profile picture if new one uploaded
+        profile_picture: req.body.profile_picture || user.profile_picture, // Update profile picture if new one uploaded
       });
 
       // Respond with success message
